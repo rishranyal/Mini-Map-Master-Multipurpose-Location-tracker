@@ -1,97 +1,155 @@
-#include <SoftwareSerial.h>
+
 #include <TinyGPSPlus.h>
+#include <SoftwareSerial.h>
 
-SoftwareSerial ss(5, 6); // RX, TX
+static const int RXPin = 5, TXPin = 6;
+String s = "www.google.com/maps/dir/";
+String lati;
+String longi;
 
-TinyGPSPlus gps;
-float f_buf[2];
+unsigned long interval = 10000;
+static const uint32_t GPSBaud = 9600;
+unsigned long previousMillis = 0;
+int data_counter;
+
+const size_t BUFSIZE = 300;
+char f_buffer[BUFSIZE];
+float *f_buf = (float*)f_buffer;
+
+TinyGPSPlus gps;// The TinyGPSPlus object
+SoftwareSerial ss(RXPin, TXPin);// The serial connection to the GPS device
+
 
 void setup()
 {
-  Serial.begin(115200);
-  ss.begin(9600);
-
-  Serial.println("Initializing A9G...");
-
-  sendATCommand("AT");
-  sendATCommand("AT+CREG?");
-  sendATCommand("AT+CPIN?");
-  sendATCommand("AT+GPS=1");
-
-  delay(10000); // Allow more time for GPS fix
-  sendATCommand("AT+GPS?");
-
-  Serial.println("A9G initialized!");
-}
-
-void loop()
-{
-  sendATcCommand("AT+GPSRD=1\r");
-  readGPSData();
-
-  delay(30000); // Delay before next data upload (adjust as needed)
-}
-
-void readGPSData()
-{
-
-    String c = ss.read()+"\r";
-   
-    
+  Serial.begin(9600);
+  ss.begin(GPSBaud);
   
+  Serial.println("Starting...");
+  ss.println("\r");
+  ss.println("AT\r");
+  delay(10);
 
+  ss.println("\r");
+  ss.println("AT+GPS=1\r");
 
-    f_buf[0] = gps.location.lat();
-    f_buf[1] = gps.location.lng();
+  delay(100);
+  ss.println("AT+CREG=2\r");
+  delay(6000);
 
-    // Print the latitude and longitude to Serial monitor
-    Serial.print("Latitude (deg): ");
-    Serial.println(f_buf[0], 6);
+  ss.print("AT+CPIN?\r");
+  ss.println("AT+CGATT=1\r");
+  delay(6000);
 
-    Serial.print("Longitude (deg): ");
-    Serial.println(f_buf[1], 6);
+  ss.println("AT+CGDCONT=1,\"IP\",\"bsnlnet\"\r");
+  delay(6000);
 
-    // Send data to ThingSpeak
-    sendToThingSpeak();
+  // ss.println("AT+LOCATION=1\r");
+  ss.println("AT+CGACT=1,1\r");
+  delay(6000);
+
+  //Initialize ends
+  //Initialize GPS
+  ss.println("\r");
+  ss.println("AT+GPS=1\r");
+  delay(1000);
+
+  //ss.println("AT+GPSMD=1\r");   // Change to only GPS mode from GPS+BDS, set to 2 to revert to default.
+  ss.println("AT+GPSRD=10\r");
+  delay(100);
+
+  // set SMS mode to text mode
+  ss.println("AT+CMGF=1\r");
+  delay(1000);
+
+  //ss.println("AT+LOCATION=2\r");
+
+  Serial.println("Setup Executed");
+}
+
+void loop() {
+    if (Serial.available()) {      // If anything comes in Serial (USB),
+      ss.write(Serial.read());   // read it and send it out ss (pins 0 & 1)
+    }
   
-}
+    if (ss.available()) {     // If anything comes in ss (pins 0 & 1)
+      Serial.write(ss.read());   // read it and send it out Serial (USB)
+    }
 
-void sendToThingSpeak()
-{
-  String apiKey = "EOPHC8L3ACH5KPIL"; // Your ThingSpeak API key
-  String data = "field1=" + String(f_buf[0], 6) + "&field2=" + String(f_buf[1], 6) + "&api_key=" + apiKey;
+  smartDelay(2000);
 
-  Serial.println("Sending HTTP request to ThingSpeak...");
-  sendATCommand("AT+CGATT=1");
-  sendATCommand("AT+CGDCONT=1,\"IP\",\"bsnlnet\"");
-  delay(800);
-  sendATCommand("AT+CGACT=1,1");
-  delay(800);
-  sendATCommand("AT+HTTPGET=\"http://api.thingspeak.com/update?" + data + "\"");
-  delay(4000);
+  if (millis() > 5000 && gps.charsProcessed() < 10)
+    Serial.println(F("No GPS data received: check wiring"));
 
-  Serial.println("HTTP request sent!");
-}
+  unsigned long currentMillis = millis();
 
-void sendATCommand(String command)
-{
-  Serial.println("Sending AT command: " + command);
-  ss.println(command);
-  delay(1000);
-  //while (ss.available())
-  {
-   // Serial.write(ss.read());
+  if ((unsigned long)(currentMillis - previousMillis) >= interval) {
+
+    send_gps_data();
+    previousMillis = currentMillis;
   }
-  Serial.println();
 }
-void sendATcCommand(String command)
+
+static void smartDelay(unsigned long ms)
 {
-  Serial.println("Sending AT command: " + command);
-  ss.println(command);
-  delay(1000);
-  while (ss.available())
+  unsigned long start = millis();
+  do
   {
-   Serial.write(ss.read());
-  }
+    while (ss.available())
+      gps.encode(ss.read());
+  } while (millis() - start < ms);
+}
+
+void send_gps_data()
+{
+
+
+  data_counter++;
+
+  Serial.print("Latitude (deg): ");
+  f_buf[data_counter] = gps.location.lat();
+  lati = gps.location.lat();
+  Serial.println(lati);
+  Serial.println(f_buf[data_counter]);
+
+  Serial.print("Longitude (deg): ");
+  f_buf[data_counter + 1] = gps.location.lng();
+  longi = gps.location.lng();
+  Serial.println(longi);
+  Serial.println(f_buf[data_counter + 1]);
+
+  Serial.println(data_counter);
   Serial.println();
+
+  s += String(gps.location.lat(), 6);
+  s += ",";
+  s += String(gps.location.lng(), 6);
+  s += "/";
+
+  Serial.println(s);
+
+  if (data_counter >= 5)
+  {
+    data_counter = 0;
+
+    Serial.println("Sending Message");
+    String apiKey = "SJG7IYJ2HDU8N7P2";
+    String data = "field1=" + lati + "&field2=" + longi + "&api_key=" + apiKey;
+    ss.println("AT+CGACT=1,1");
+    ss.println("AT+CGATT=1"); 
+    ss.println("AT+CMGF=1\r");
+    ss.println("AT+HTTPGET=\"http://api.thingspeak.com/update?" + data + "\"");
+
+    delay(1000);
+
+    ss.println("AT+CNMI=2,2,0,0,0\r");
+    delay(1000);
+
+    ss.print("AT+CMGS=\"+918850065141\"\r");//Replace this with your mobile number
+    delay(1000);
+    ss.print(s);
+    ss.write(0x1A);
+    delay(1000);
+    s = "www.google.com/maps/dir/";
+  }
 }
