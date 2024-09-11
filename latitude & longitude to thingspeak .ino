@@ -145,7 +145,7 @@ void send_gps_data()
     ss.println("AT+CNMI=2,2,0,0,0\r");
     delay(1000);
 
-    ss.print("AT+CMGS=\"+918850065141\"\r");//Replace this with your mobile number
+    ss.print("AT+CMGS=\"+91....\"\r");//Replace this with your mobile number
     delay(1000);
     ss.print(s);
     ss.write(0x1A);
