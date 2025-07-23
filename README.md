@@ -24,7 +24,7 @@ Follow the instructions in the repository to set up your Pocket GPS Tracker. The
 3. **Cloud Integration:** If desired, connect the device to the cloud for remote location monitoring.
 4. **User Interface:** Use the user-friendly interface to check and manage the location status.
 
-## Contributing
-We welcome contributions to enhance the capabilities and features of the Pocket GPS Tracker. Feel free to submit issues or pull requests to contribute to the project's development.
-
+## File strucuture
+There are 2 code files. 
+One sends the location information in the NMEA (National Marine Electronics Association) format and the other continuously uplaods the data to the cloud, in this case ThingSpeak.
 
